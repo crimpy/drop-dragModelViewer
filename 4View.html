@@ -1,0 +1,441 @@
+
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>three.js webgl - interactive cubes</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				font-family: Monospace;
+				background-color: #0000ff;
+				margin: 0px;
+				overflow: hidden;
+			}
+					#drop_zone {
+			    border: 2px dashed #bbb;
+			    -moz-border-radius: 5px;
+			    -webkit-border-radius: 5px;
+			    border-radius: 5px;
+			    padding: 25px;
+			    text-align: center;
+			    font: 20pt bold 'Vollkorn';
+			    color: #bbb;
+			}
+			#dat {
+				background-color: #e6e6e6;
+			}
+
+			.box__dragndrop,
+			.box__uploading,
+			.box__success,
+			.box__error {
+			  display: none;
+			}
+			.box.has-advanced-upload {
+			  background-color: white;
+			  outline: 2px dashed black;
+			  outline-offset: -10px;
+			}
+			.box.has-advanced-upload .box__dragndrop {
+			  display: inline;
+			}
+			.box.is-dragover {
+			  background-color: grey;
+			}
+			.box.is-uploading .box__input {
+			  visibility: none;
+			}
+			.box.is-uploading .box__uploading {
+			  display: block;
+			}
+		</style>
+	<script src="build/three.js"></script>
+	<script src="js/Detector.js"></script>
+	<!--<script src="js/Vector3.js"></script>-->
+	<!--<script src="js/controls/OrbitControls.js"></script>-->
+	<!--<script src="js/controls/CameraControls.js"></script>-->
+	<script src="js/libs/stats.min.js"></script>
+	<script src="js/SolidImporter.js"></script>
+	<script src="jquery-2.1.3.min.js"></script>
+
+	</head>
+
+	<body>
+	<div id="container">
+		<form  class="box" method="post" action="" enctype="multipart/form-data">
+		  <div class="box__input" id="drop_zone">
+		    <input  class="box__file" type="file" name="files[]" id="file" data-multiple-caption="{count} files selected" multiple />
+		    <label for="file"><strong>Choose a file</strong><span class="box__dragndrop"> or drag it here</span>.</label>
+		    <button class="box__button" type="submit">Upload</button>
+		  </div>
+		  <div class="box__uploading">Uploading&hellip;</div>
+		  <div class="box__success">Done!</div>
+		  <div class="box__error">Error! <span></span>.</div>
+		</form>
+	</div>
+	<script>
+	'use strict';
+	var dim=5, textData, points;
+	var zoom=1, isMouseDown=false, mouse3D, isMouseDown = false, onMouseDownPosition,
+		radious = 1, theta = 15, onMouseDownTheta = 45, phi = 145, onMouseDownPhi = 60;
+	var frustumSize 		= 1000;
+	var solidIn, gCut, menuDD;
+	var $form = $('.box');
+	var windowWidth, windowHeight;
+	var mouseX = 0, mouseY = 0;
+	var dropZone = document.getElementById('drop_zone');
+	dropZone.addEventListener('dragover', handleDragOver, false);
+	dropZone.addEventListener('drop', handleFileSelect, false);
+
+	var container = document.getElementById( 'container' );
+	var dat = document.createElement( 'div' );
+				dat.id="dat";
+				dat.style.position = 'absolute';
+				dat.style.top = '60px';
+				dat.style.width = '140px';
+				dat.style.textAlign = 'center';
+				document.body.appendChild( dat );
+
+	var views = [
+				{
+					left: 0,
+					top: 0,
+					width: 0.5,
+					height: 1.0,
+					background: new THREE.Color( 0.3, 0.5, 0.7 ),
+					eye: [ 800, 0, 0 ],
+					up: [ 0, 1, 0 ],
+					fov: 50,
+					updateCamera: function ( camera, scene, mouseX, mouseY ) {
+					//	if ( isMouseDown ) {
+					theta 	= - ( ( mouseX ) * 0.5 ) +.5;
+					phi 	=   ( ( mouseY ) * 0.5 ) +0.5;
+
+					phi = Math.min( 179, Math.max(-179, phi ) );
+
+					camera.position.x = 0.5 * Math.sin( theta * Math.PI / 360 ) * Math.cos( phi * Math.PI / 360 );
+					camera.position.y = 0.5 * Math.sin( phi * Math.PI / 360 );
+					camera.position.z = 0.5 * Math.cos( theta * Math.PI / 360 ) * Math.cos( phi * Math.PI / 360 );
+
+					//  camera.position.y += mouseX * 0.05;
+					//  camera.position.x -= mouseX * 0.05;
+					//  camera.position.y = Math.max( Math.min( camera.position.y, 600 ), -600 );
+					//  camera.position.x = Math.max( Math.min( camera.position.x, 600 ), -600 );
+					  
+					  camera.lookAt( 0,0,0 );
+						}
+				//	}
+				},
+				{
+					left: 0.5,
+					top: 0.5,
+					width: 0.5,
+					height: 0.5,
+					background: new THREE.Color( 0.7, 0.5, 0.5 ),
+					eye: [ 0, 800, 0 ],
+					up: [ 0, 0, 1 ],
+					fov: 45,
+					updateCamera: function ( camera, scene, mouseX, mouseY ) {
+					  camera.position.x -= mouseX * 0.05;
+					  camera.position.x = Math.max( Math.min( camera.position.x, 500 ), -500 );
+					  camera.lookAt( camera.position.clone().setY( 0 ) );
+					}
+				},
+				{
+					left: 0.5,
+					top: 0,
+					width: 0.5,
+					height: 0.5,
+					background: new THREE.Color( 0.5, 0.7, 0.7 ),
+					eye: [ 400, 800, 400 ],
+					up: [ 0.5, 1, 0.5 ],
+					fov: 60,
+					updateCamera: function ( camera, scene, mouseX, mouseY ) {
+					  camera.position.y -= mouseX * 0.05;
+					  camera.position.y = Math.max( Math.min( camera.position.y, 300 ), -300 );
+					  camera.lookAt( scene.position );
+					}
+				},
+				{
+					left: 0,
+					top: 0.5,
+					width: 0.5,
+					height: 0.5,
+					background: new THREE.Color( 0.5, 0.6, 0.7 ),
+					eye: [ 400, 0, 0 ],
+					up: [ 0, 1, 0 ],
+					fov: 50,
+					updateCamera: function ( camera, scene, mouseX, mouseY ) {
+					  camera.position.y += mouseX * 0.05;
+					  camera.position.y = Math.max( Math.min( camera.position.y, 600 ), -600 );
+					  camera.lookAt( scene.position );
+					}
+				}
+			];
+
+if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
+			
+			//const CameraControls = cameraControlsFactory( THREE );
+			var stats;
+			var mouse = new THREE.Vector2(), INTERSECTED;
+			const clock = new THREE.Clock();
+			const scene = new THREE.Scene();
+			//	scene.background = new THREE.Color( 0xcccccc );
+			//const camera = new THREE.PerspectiveCamera( 30, window.innerWidth /window.innerHeight, 1, 2000 );
+			//	camera.position.set( 250, 250, 500 );
+			for (var ii =  0; ii < views.length; ++ii ) {
+
+					var view = views[ii];
+					var camera = new THREE.PerspectiveCamera( view.fov, window.innerWidth / window.innerHeight, 1, 10000 );
+					camera.position.fromArray( view.eye );
+					camera.up.fromArray( view.up );
+					view.camera = camera;
+
+				}
+			const raycaster = new THREE.Raycaster();
+			const renderer = new THREE.WebGLRenderer( { antialias: true, stencil: false } );
+				renderer.setPixelRatio( window.devicePixelRatio );
+			//const controls = new CameraControls( camera, renderer.domElement );
+
+	function init() {
+		renderer.setSize( window.innerWidth, window.innerHeight );
+		container.appendChild( renderer.domElement );
+
+				
+
+		//camera.position.z = 5;//solidIn.localCoords.zExt+1000;
+		//camera.position.y = 0;//-2*solidIn.localCoords.yExt;
+		//camera.position.x = 0;//-2*solidIn.localCoords.xExt;
+		//controls = new THREE.OrbitControls( camera, renderer.domElement );
+		//controls.addEventListener( 'change', render ); // remove when using animation loop
+		// enable animation loop when using damping or autorotation
+		//controls.enableDamping = true;
+		//controls.dampingFactor = 0.25;
+		//controls.enableZoom = true;
+
+		// lights
+		var light = new THREE.DirectionalLight( 0xffffff );
+		light.position.set( 1, 1, 100 );
+		scene.add( light );
+		var light = new THREE.DirectionalLight( 0x002288 );
+		light.position.set( -1, -1, -100 );
+		scene.add( light );
+		var light = new THREE.AmbientLight( 0xffffff );
+		scene.add( light );
+		var light = new THREE.SpotLight( 0xffffff, 1.5 );
+		light.position.set( 0, 1500, 1500 );
+		light.castShadow = true;
+		light.shadow = new THREE.LightShadow( new THREE.PerspectiveCamera( 70, 1, 200, 2000 ) );
+		light.shadow.bias = -0.000222;
+		light.shadow.mapSize.width = 1024;
+		light.shadow.mapSize.height = 1024;
+		scene.add( light );
+		//spotlight = light;
+		var planeMaterial = new THREE.ShadowMaterial();
+		planeMaterial.opacity = 0.2;
+		var planeGeometry = new THREE.PlaneGeometry( 2000, 2000 );
+		planeGeometry.rotateX( - Math.PI / 2 );
+		var planeMaterial = new THREE.ShadowMaterial( { opacity: 0.2 } );
+		var plane = new THREE.Mesh( planeGeometry, planeMaterial );
+		plane.position.y = -200;
+		plane.receiveShadow = true;
+		scene.add( plane );
+		var helper = new THREE.GridHelper( 2000, 100 );
+		helper.position.y = - 199;
+		helper.material.opacity = 0.25;
+		helper.material.transparent = true;
+		scene.add( helper );
+		//const gridHelper = new THREE.GridHelper( 500, 50 );
+		//gridHelper.position.y = - 1;
+		//scene.add( gridHelper );
+		//
+		//stats = new Stats();
+		//container.appendChild( stats.dom );
+		//
+		document.addEventListener( 'mousemove', onDocumentMouseMove, false );
+		window.addEventListener( 'resize', onWindowResize, false );
+	}
+
+
+function onWindowResize() {
+	camera.aspect = window.innerWidth / window.innerHeight;
+	camera.updateProjectionMatrix();
+	renderer.setSize( window.innerWidth, window.innerHeight );
+}
+
+	var isAdvancedUpload = function() {
+	  var div = document.createElement('div');
+	  return (('draggable' in div) || ('ondragstart' in div && 'ondrop' in div)) && 'FormData' in window && 'FileReader' in window;
+	}();
+
+	if (isAdvancedUpload) {
+	  var droppedFiles = false;
+	  $form.on('drag dragstart dragend dragover dragenter dragleave drop', function(e) {
+	    e.preventDefault();
+	    e.stopPropagation();
+	  })
+	  .on('dragover dragenter', function() {
+	    $form.addClass('is-dragover');
+	  })
+	  .on('dragleave dragend drop', function() {
+	    $form.removeClass('is-dragover');
+	  })
+	  .on('drop', function(e) {
+	    droppedFiles = e.originalEvent.dataTransfer.files;
+	  });
+	}
+
+	$form.on('submit', function(e) {
+	  if ($form.hasClass('is-uploading')) return false;
+
+	  $form.addClass('is-uploading').removeClass('is-error');
+
+	  if (isAdvancedUpload) {
+	    // ajax for modern browsers
+	  } else {
+	    // ajax for legacy browsers
+	  }
+	});
+
+	if (isAdvancedUpload) {
+	 // e.preventDefault();
+
+	  var ajaxData = new FormData($form.get(0));
+
+	  if (droppedFiles) {
+		    $.each( droppedFiles, function(i, file) {
+		      ajaxData.append( $input.attr('name'), file );
+		    });
+		  }
+
+		  $.ajax({
+		    url: $form.attr('action'),
+		    type: $form.attr('method'),
+		    data: ajaxData,
+		    dataType: 'json',
+		    cache: false,
+		    contentType: false,
+		    processData: false,
+		    complete: function() {
+		      $form.removeClass('is-uploading');
+		    },
+		    success: function(data) {
+		      $form.addClass( data.success == true ? 'is-success' : 'is-error' );
+		      if (!data.success) $errorMsg.text(data.error);
+		    },
+		    error: function() {
+		      // Log the error, show an alert, whatever works for you
+		    }
+		  });
+	}
+
+function goo() {	
+	var gCut = document.getElementById("gCut").value;
+	var nodes = solidIn.getSolidDimensions();
+   	solidIn.localArray(0,1, nodes, gCut);
+	init();
+   	solidIn.checkAround();
+   	solidIn.makeHeap(1,1,1);
+	render();
+    animate();
+    //document.addEventListener( 'mousemove', onDocumentMouseMove, false );
+}
+
+function handleFileSelect(evt) {
+    evt.stopPropagation();
+    evt.preventDefault();
+
+    var files = evt.dataTransfer.files; // FileList object.
+
+    // files is a FileList of File objects. List some properties.
+    var reader = new FileReader();  
+    reader.onload = function(event) {            
+        document.getElementById('drop_zone').value = event.target.result;
+        solidIn = new SolidImporter(event.target.result);
+        var tainer = document.createElement( 'div' );
+		document.body.appendChild( tainer );
+
+		menuDD = document.createElement( 'div' );
+		menuDD.style.position = 'fixed';
+		menuDD.style.right = '0px';
+		menuDD.style.width = '200px';
+		menuDD.style.textAlign = 'right';
+		menuDD.innerHTML = 'gMax: <output id="gMax" placeholder="5"></output></br> gMin: <output id="gMin" placeholder="5"></output></br> <input id="gCut"  placeholder="5" /><a href="#" onclick ="goo();">Render Model</a>';
+		tainer.appendChild( menuDD );
+
+    	solidIn.processFile();
+		document.getElementById("gMax").value=solidIn.minMaxArr.gMax;
+    	document.getElementById("gMin").value=solidIn.minMaxArr.gMin;		
+        console.log("file Loaded");
+    }        
+    reader.readAsText(files[0],"UTF-8");
+  }
+
+  function handleDragOver(evt) {
+    evt.stopPropagation();
+    evt.preventDefault();
+    evt.dataTransfer.dropEffect = 'copy'; // Explicitly show this is a copy.
+  }
+function onDocumentMouseMove( event ) {
+
+				mouseX = ( event.clientX - windowWidth / 2 );
+				mouseY = ( event.clientY - windowHeight / 2 );
+
+			}
+
+			function updateSize() {
+
+				if ( windowWidth != window.innerWidth || windowHeight != window.innerHeight ) {
+
+					windowWidth  = window.innerWidth;
+					windowHeight = window.innerHeight;
+
+					renderer.setSize ( windowWidth, windowHeight );
+
+				}
+
+			}
+
+			function animate() {
+
+				render();
+				//stats.update();
+
+				requestAnimationFrame( animate );
+			}
+
+			function render() {
+
+				updateSize();
+
+				for ( var ii = 0; ii < views.length; ++ii ) {
+
+					var view = views[ii];
+					var camera = view.camera;
+
+					view.updateCamera( camera, scene, mouseX, mouseY );
+
+					var left   = Math.floor( windowWidth  * view.left );
+					var top    = Math.floor( windowHeight * view.top );
+					var width  = Math.floor( windowWidth  * view.width );
+					var height = Math.floor( windowHeight * view.height );
+
+					renderer.setViewport( left, top, width, height );
+					renderer.setScissor( left, top, width, height );
+					renderer.setScissorTest( true );
+					renderer.setClearColor( view.background );
+
+					camera.aspect = width / height;
+					camera.updateProjectionMatrix();
+
+					renderer.render( scene, camera );
+
+				}
+
+			}
+
+		</script>
+
+	</body>
+</html>
